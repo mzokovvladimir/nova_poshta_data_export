@@ -1,0 +1,158 @@
+import requests
+import openpyxl
+from typing import List, Dict, Any
+
+
+API_KEY = 'YOUR_API_KEY'  # Введіть свій API ключ Нової Пошти
+
+
+def get_areas() -> List[Dict[str, Any]]:
+    """
+    Функція, яка отримує дані про всі області Нової Пошти через API.
+
+    :return: Список областей, де кожен елемент є словником із інформацією про область.
+    """
+    url = 'https://api.novaposhta.ua/v2.0/json/'
+    headers = {'Content-Type': 'application/json'}
+    body = {
+        "apiKey": API_KEY,
+        "modelName": "Address",
+        "calledMethod": "getAreas",
+        "methodProperties": {}
+    }
+    response = requests.post(url, json=body, headers=headers)
+
+    try:
+        response.raise_for_status()  # Перевірка на помилки HTTP
+        return response.json().get('data', [])  # Якщо ключа 'data' немає, повернути порожній список
+    except requests.exceptions.RequestException as e:
+        print(f"Помилка під час виконання запиту getAreas: {e}")
+    except ValueError:
+        print(f"Некоректний формат JSON у відповіді від getAreas: {response.text}")
+
+    return []
+
+
+def get_cities(area_ref: str) -> List[Dict[str, Any]]:
+    """
+    Функція, яка отримує дані про міста вказаної області через API.
+
+    :param area_ref: Унікальний ідентифікатор області (реф).
+    :return: Список міст, де кожен елемент є словником із інформацією про місто.
+    """
+    url = 'https://api.novaposhta.ua/v2.0/json/'
+    headers = {'Content-Type': 'application/json'}
+    body = {
+        "apiKey": API_KEY,
+        "modelName": "Address",
+        "calledMethod": "getCities",
+        "methodProperties": {
+            "AreaRef": area_ref
+        }
+    }
+    response = requests.post(url, json=body, headers=headers)
+
+    try:
+        response.raise_for_status()
+        return response.json().get('data', [])
+    except requests.exceptions.RequestException as e:
+        print(f"Помилка під час виконання запиту getCities: {e}")
+    except ValueError:
+        print(f"Некоректний формат JSON у відповіді від getCities: {response.text}")
+
+    return []
+
+
+def get_warehouses(city_ref: str) -> List[Dict[str, Any]]:
+    """
+    Функція, яка отримує дані про відділення вказаного міста через API.
+
+    :param city_ref: Унікальний ідентифікатор міста (реф).
+    :return: Список відділень, де кожен елемент є словником із інформацією про відділення.
+    """
+    url = 'https://api.novaposhta.ua/v2.0/json/'
+    headers = {'Content-Type': 'application/json'}
+    body = {
+        "apiKey": API_KEY,
+        "modelName": "AddressGeneral",
+        "calledMethod": "getWarehouses",
+        "methodProperties": {
+            "CityRef": city_ref
+        }
+    }
+    response = requests.post(url, json=body, headers=headers)
+
+    try:
+        response.raise_for_status()
+        return response.json().get('data', [])
+    except requests.exceptions.RequestException as e:
+        print(f"Помилка під час виконання запиту getWarehouses: {e}")
+    except ValueError:
+        print(f"Некоректний формат JSON у відповіді від getWarehouses: {response.text}")
+
+    return []
+
+
+def save_to_excel(excel_filename: str) -> None:
+    """
+    Функція для отримання даних про області, міста та відділення Нової Пошти та зберіження їх до Excel файлу.
+
+    У файлі дані зберігаються у таких колонках:
+    - A: Region
+    - B: City
+    - C: Department
+
+    :param excel_filename: Назва Excel файлу для збереження результатів.
+    """
+    # Створюємо новий Excel файл
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = 'Nova Poshta Departments'
+
+    # Заголовки колонок
+    sheet['A1'] = 'Region'
+    sheet['B1'] = 'City'
+    sheet['C1'] = 'Department'
+
+    areas = get_areas()  # Отримуємо дані про області
+
+    if not areas:
+        print("Не вдалося отримати дані про області.")
+        return
+
+    row = 2  # Починаємо з другого рядка
+
+    for area in areas:
+        area_name = area['Description']
+        area_ref = area['Ref']
+
+        cities = get_cities(area_ref)
+
+        if not cities:
+            print(f"Не вдалося отримати дані про міста для області: {area_name}")
+            continue
+
+        for city in cities:
+            city_name = city['Description']
+            city_ref = city['Ref']
+
+            warehouses = get_warehouses(city_ref)
+
+            if not warehouses:
+                print(f"Не вдалося отримати дані про відділення для міста: {city_name}")
+                continue
+
+            for warehouse in warehouses:
+                warehouse_name = warehouse['Description']
+                sheet.cell(row=row, column=1, value=area_name)
+                sheet.cell(row=row, column=2, value=city_name)
+                sheet.cell(row=row, column=3, value=warehouse_name)
+                row += 1
+
+    # Зберігаємо Excel файл
+    workbook.save(excel_filename)
+    print(f"Інформацію успішно збережено до '{excel_filename}'")
+
+
+if __name__ == "__main__":
+    save_to_excel('nova_poshta.xlsx')
